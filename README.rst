@@ -15,8 +15,7 @@
 
 .. class:: center
 
-    :Название исследуемой задачи: «On the periodic behavior of deep neural networks training on the example of
-the grokking effect
+    :Название исследуемой задачи: On the periodic behavior of deep neural networks training. Grokking effect.
     :Тип научной работы: CoIS
     :Автор: Мельник Юрий Максимович
     :Научный руководитель: к.ф-м.н. Ветров Дмитрий Петрович
