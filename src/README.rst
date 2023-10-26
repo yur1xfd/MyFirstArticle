@@ -7,11 +7,11 @@ Requirements
 
 - Python 3.*
 - pip 20.0.2
-numpy 1.23.5
-pytorch 2.1.0+cu118
-einops 0.7.0
-matplotlib 3.7.1
-tqdm 4.66.1
+- numpy 1.23.5
+- pytorch 2.1.0+cu118
+- einops 0.7.0
+- matplotlib 3.7.1
+- tqdm 4.66.1
 
 Installing by using PyPi
 ========================
