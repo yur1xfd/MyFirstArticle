@@ -75,29 +75,25 @@ class PosEmbed(nn.Module):
 
 # LayerNorm
 class LayerNorm(nn.Module):
-    def __init__(self, d_model, epsilon = 1e-4, affine=False, model=[None]):
+    def __init__(self, d_model, epsilon = 1e-4, model=[None]):
         super().__init__()
         self.model = model
-        self.affine = affine
-        if self.affine:
-            self.w_ln = nn.Parameter(torch.ones(d_model))
-            self.b_ln = nn.Parameter(torch.zeros(d_model))
+        self.w_ln = nn.Parameter(torch.ones(d_model))
+        self.b_ln = nn.Parameter(torch.zeros(d_model))
         self.epsilon = epsilon
 
     def forward(self, x):
         if self.model[0].use_ln:
             x = x - x.mean(axis=-1)[..., None]
             x = x / (x.std(axis=-1)[..., None] + self.epsilon)
-            if self.affine:
-                x = x * self.w_ln
-                x = x + self.b_ln
-
+            x = x * self.w_ln
+            x = x + self.b_ln
             return x
         else:
             return x
 
-# Scale Invariant Attention
-class SI_Attention(nn.Module):
+# Attention
+class Attention(nn.Module):
     def __init__(self, d_model, num_heads, d_head, n_ctx, model):
         super().__init__()
         self.model = model
@@ -106,10 +102,7 @@ class SI_Attention(nn.Module):
         self.W_V = nn.Parameter(torch.randn(num_heads, d_head, d_model)/np.sqrt(d_model))
         self.W_O = nn.Parameter(torch.randn(d_model, d_head * num_heads)/np.sqrt(d_model))
         self.register_buffer('mask', torch.tril(torch.ones((n_ctx, n_ctx))))
-        self.d_model = d_model
-        self.num_heads = num_heads
         self.d_head = d_head
-        self.n_ctx = n_ctx
         self.hook_k = HookPoint()
         self.hook_q = HookPoint()
         self.hook_v = HookPoint()
@@ -123,9 +116,7 @@ class SI_Attention(nn.Module):
         v = self.hook_v(torch.einsum('ihd,bpd->biph', self.W_V, x))
         attn_scores_pre = torch.einsum('biph,biqh->biqp', k, q)
         attn_scores_masked = torch.tril(attn_scores_pre) - 1e10 * (1 - self.mask[:x.shape[-2], :x.shape[-2]])
-        attn_matrix = self.hook_attn(F.relu(self.hook_attn_pre(attn_scores_masked)))
-        # normalization
-        attn_matrix = attn_matrix / (attn_matrix.sum(axis=-1).unsqueeze(-1) + 1e-30)
+        attn_matrix = self.hook_attn(F.softmax(self.hook_attn_pre(attn_scores_masked/np.sqrt(self.d_head)), dim=-1))
         z = self.hook_z(torch.einsum('biph,biqp->biqh', v, attn_matrix))
         z_flat = einops.rearrange(z, 'b i q h -> b q (i h)')
         out = torch.einsum('df,bqf->bqd', self.W_O, z_flat)
@@ -139,19 +130,22 @@ class MLP(nn.Module):
         self.W_in = nn.Parameter(torch.randn(d_mlp, d_model)/np.sqrt(d_model))
         self.b_in = nn.Parameter(torch.zeros(d_mlp))
         self.W_out = nn.Parameter(torch.randn(d_model, d_mlp)/np.sqrt(d_model))
+        self.b_out = nn.Parameter(torch.zeros(d_model))
         self.act_type = act_type
+        self.ln = LayerNorm(d_mlp, model=self.model)
         self.hook_pre = HookPoint()
         self.hook_post = HookPoint()
         assert act_type in ['ReLU', 'GeLU']
 
     def forward(self, x):
         x = self.hook_pre(torch.einsum('md,bpd->bpm', self.W_in, x)) + self.b_in
+        x = self.ln(x)
         if self.act_type=='ReLU':
             x = F.relu(x)
         elif self.act_type=='GeLU':
             x = F.gelu(x)
         x = self.hook_post(x)
-        x = torch.einsum('dm,bpm->bpd', self.W_out, x)
+        x = torch.einsum('dm,bpm->bpd', self.W_out, x) + self.b_out
         return x
 
 # Transformer Block
@@ -159,9 +153,9 @@ class TransformerBlock(nn.Module):
     def __init__(self, d_model, d_mlp, d_head, num_heads, n_ctx, act_type, model):
         super().__init__()
         self.model = model
-        self.ln1 = LayerNorm(d_model, model=self.model, epsilon = 0.0, affine=False)
-        self.attn = SI_Attention(d_model, num_heads, d_head, n_ctx, model=self.model)
-        self.ln2 = LayerNorm(d_model, model=self.model, epsilon = 0.0, affine=False)
+        self.ln1 = LayerNorm(d_model, model=self.model)
+        self.attn = Attention(d_model, num_heads, d_head, n_ctx, model=self.model)
+        self.ln2 = LayerNorm(d_model, model=self.model)
         self.mlp = MLP(d_model, d_mlp, act_type, model=self.model)
         self.hook_attn_out = HookPoint()
         self.hook_mlp_out = HookPoint()
@@ -183,10 +177,8 @@ class Transformer(nn.Module):
 
         self.embed = Embed(d_vocab, d_model)
         self.pos_embed = PosEmbed(n_ctx, d_model)
-        self.lna = LayerNorm(d_model, model=[self], epsilon = 0.0, affine=True)
-        self.W_pre = nn.Parameter(torch.randn(d_model, d_model)/np.sqrt(d_model))
         self.blocks = nn.ModuleList([TransformerBlock(d_model, d_mlp, d_head, num_heads, n_ctx, act_type, model=[self]) for i in range(num_layers)])
-        self.ln = LayerNorm(d_model, model=[self], epsilon = 0.0, affine=False)
+        self.ln = LayerNorm(d_model, model=[self])
         self.unembed = Unembed(d_vocab, d_model)
         self.use_ln = use_ln
 
@@ -197,14 +189,11 @@ class Transformer(nn.Module):
     def forward(self, x):
         x = self.embed(x)
         x = self.pos_embed(x)
-        x = self.lna(x)
-        x = x @ self.W_pre
         for block in self.blocks:
             x = block(x)
 
         x = self.ln(x)
         x = self.unembed(x)
-
         return x[:, -1]
 
     def set_use_cache(self, use_cache):
@@ -228,4 +217,3 @@ class Transformer(nn.Module):
             hp.add_hook(save_hook, 'fwd')
             if incl_bwd:
                 hp.add_hook(save_hook_back, 'bwd')
-
