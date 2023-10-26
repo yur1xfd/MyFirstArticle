@@ -11,3 +11,5 @@
 | 8 | Understanding Gradient Regularization in Deep Learning: Efficient Finite-Difference Computation and Implicit Bias, 2023 | [link](https://arxiv.org/abs/2210.02720v2) | Градиентная регуляризация с конечно-разностной аппроксимацией. Связь с методом оптимизации SAM. |
 | 9 | Progress measures for grokking via mechanistic interpretability, 2023 | [link](https://arxiv.org/abs/2301.05217) | Объяснение эффекта гроккинга через фазовые переходы: запоминание, обучение, удаление шума.|
 | 10 | Grokking as the Transition from Lazy to Rich Training Dynamics, 2023 | [link](https://arxiv.org/abs/2310.06110) | Связь эффекта гроккинга с "ленивым обучением". Не необходимость наличия регуляризации для возникновения гроккинга. |
+| 11 | Deep Double Descent: Where Bigger Models and More Data Hurt, 2019 | [link](https://arxiv.org/abs/1912.02292) | Двойной спуск в глубоких нейросетях. |
+| 12 | Can we avoid Double Descent in Deep Neural Networks?, 2023 | [link](https://arxiv.org/abs/2302.13259) | Способы борьбы с эффектом двойного спуска. |
