@@ -1,3 +1,5 @@
-numpy==1.21.5
-scipy==1.4.1
-scikit-learn==1.0.2
+numpy==1.23.5
+pytorch==2.1.0+cu118
+einops==0.7.0
+matplotlib==3.7.1
+tqdm==4.66.1
